@@ -1,51 +1,163 @@
-#include <avr\io.h>
-#include <avr\interrupt.h>
-#include <avr/pgmspace.h>
-const uint8_t  sinewave[] PROGMEM= //256 values
+/*
+ * ATmega_GLCD_TextFont
+ * http://electronicwings.com
+ */
+
+#define F_CPU 8000000UL				/* Define CPU clock Frequency 8MHz */
+#include <avr/io.h>					/* Include AVR std. library file */
+#include <util/delay.h>				/* Include defined delay header file */
+#include <stdio.h>					/* Include standard i/o library file */
+#include "Font_Header.h"
+
+#define Data_Port			PORTA	/* Define data port for GLCD */
+#define Command_Port		PORTC	/* Define command port for GLCD */
+#define Data_Port_Dir		DDRA	/* Define data port for GLCD */
+#define Command_Port_Dir	DDRC	/* Define command port for GLCD */
+
+#define RS					PC0		/* Define control pins */
+#define RW					PC1
+#define EN					PC2
+#define CS1					PC3
+#define CS2					PC4
+#define RST					PC5
+
+#define TotalPage			8
+
+void GLCD_Command(char Command)		/* GLCD command function */
 {
-0x80,0x83,0x86,0x89,0x8c,0x8f,0x92,0x95,0x98,0x9c,0x9f,0xa2,0xa5,0xa8,0xab,0xae,
-0xb0,0xb3,0xb6,0xb9,0xbc,0xbf,0xc1,0xc4,0xc7,0xc9,0xcc,0xce,0xd1,0xd3,0xd5,0xd8,
-0xda,0xdc,0xde,0xe0,0xe2,0xe4,0xe6,0xe8,0xea,0xec,0xed,0xef,0xf0,0xf2,0xf3,0xf5,
-0xf6,0xf7,0xf8,0xf9,0xfa,0xfb,0xfc,0xfc,0xfd,0xfe,0xfe,0xff,0xff,0xff,0xff,0xff,
-0xff,0xff,0xff,0xff,0xff,0xff,0xfe,0xfe,0xfd,0xfc,0xfc,0xfb,0xfa,0xf9,0xf8,0xf7,
-0xf6,0xf5,0xf3,0xf2,0xf0,0xef,0xed,0xec,0xea,0xe8,0xe6,0xe4,0xe2,0xe0,0xde,0xdc,
-0xda,0xd8,0xd5,0xd3,0xd1,0xce,0xcc,0xc9,0xc7,0xc4,0xc1,0xbf,0xbc,0xb9,0xb6,0xb3,
-0xb0,0xae,0xab,0xa8,0xa5,0xa2,0x9f,0x9c,0x98,0x95,0x92,0x8f,0x8c,0x89,0x86,0x83,
-0x80,0x7c,0x79,0x76,0x73,0x70,0x6d,0x6a,0x67,0x63,0x60,0x5d,0x5a,0x57,0x54,0x51,
-0x4f,0x4c,0x49,0x46,0x43,0x40,0x3e,0x3b,0x38,0x36,0x33,0x31,0x2e,0x2c,0x2a,0x27,
-0x25,0x23,0x21,0x1f,0x1d,0x1b,0x19,0x17,0x15,0x13,0x12,0x10,0x0f,0x0d,0x0c,0x0a,
-0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x03,0x02,0x01,0x01,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x02,0x03,0x03,0x04,0x05,0x06,0x07,0x08,
-0x09,0x0a,0x0c,0x0d,0x0f,0x10,0x12,0x13,0x15,0x17,0x19,0x1b,0x1d,0x1f,0x21,0x23,
-0x25,0x27,0x2a,0x2c,0x2e,0x31,0x33,0x36,0x38,0x3b,0x3e,0x40,0x43,0x46,0x49,0x4c,
-0x4f,0x51,0x54,0x57,0x5a,0x5d,0x60,0x63,0x67,0x6a,0x6d,0x70,0x73,0x76,0x79,0x7c
-};
-uint8_t i=0;
-ISR(TIMER1_COMPA_vect){
-	OCR1A=pgm_read_byte(&sinewave[i]);
-   i++;
-	}
-int main(void) {
-//Port D pins as input
-DDRD=0x00;
-//Enable internal pull ups
-PORTD=0xFF;
-//Set PORTB1 pin as output
-DDRB=0xFF;
-// initial OCR1A value
-OCR1A=80;
-//Output compare OC1A 8 bit non inverted PWM
-TCCR1A=0x91;
-//start timer without prescaler
-TCCR1B=0x01;
-//enable output compare interrupt for OCR1A
-TIMSK=0x10;
-//enable global interrups
-sei();
-    while (1) {
-   //loop for ever. Interrupts will do the job.
-    }
+	Data_Port = Command;			/* Copy command on data pin */
+	Command_Port &= ~(1 << RS);		/* Make RS LOW to select command register */
+	Command_Port &= ~(1 << RW);		/* Make RW LOW to select write operation */
+	Command_Port |=  (1 << EN);		/* Make HIGH to LOW transition on Enable pin */
+	_delay_us(5);
+	Command_Port &= ~(1 << EN);
+	_delay_us(5);
 }
 
+void GLCD_Data(char Data)			/* GLCD data function */
+{
+	Data_Port = Data;				/* Copy data on data pin */
+	Command_Port |=  (1 << RS);		/* Make RS HIGH to select data register */
+	Command_Port &= ~(1 << RW);		/* Make RW LOW to select write operation */
+	Command_Port |=  (1 << EN);		/* Make HIGH to LOW transition on Enable pin */
+	_delay_us(5);
+	Command_Port &= ~(1 << EN);
+	_delay_us(5);
+}
 
+void GLCD_Init()					/* GLCD initialize function */
+{
+	Data_Port_Dir = 0xFF;
+	Command_Port_Dir = 0xFF;
+	/* Select both left & right half of display & Keep reset pin high */
+	Command_Port |= (1 << CS1) | (1 << CS2) | (1 << RST);
+	_delay_ms(20);
+	GLCD_Command(0x3E);				/* Display OFF */
+	GLCD_Command(0x40);				/* Set Y address (column=0) */
+	GLCD_Command(0xB8);				/* Set x address (page=0) */
+	GLCD_Command(0xC0);				/* Set z address (start line=0) */
+	GLCD_Command(0x3F);				/* Display ON */
+}
+
+void GLCD_ClearAll()				/* GLCD all display clear function */
+{
+	int i,j;
+	/* Select both left & right half of display */
+	Command_Port |= (1 << CS1) | (1 << CS2);
+	for(i = 0; i < TotalPage; i++)
+	{
+		GLCD_Command((0xB8) + i);	/* Increment page each time after 64 column */
+		for(j = 0; j < 64; j++)
+		{
+			GLCD_Data(0);			/* Write zeros to all 64 column */
+		}
+	}
+	GLCD_Command(0x40);				/* Set Y address (column=0) */
+	GLCD_Command(0xB8);				/* Set x address (page=0) */
+}
+
+void GLCD_String(char page_no, char *str)			/* GLCD string write function */
+{
+	unsigned int i, column;
+	unsigned int Page = ((0xB8) + page_no);
+	unsigned int Y_address = 0;
+	float Page_inc = 0.5;
+
+	Command_Port |= (1 << CS1);						/* Select first Left half of display */
+	Command_Port &= ~(1 << CS2);
+
+	GLCD_Command(Page);
+	for(i = 0; str[i] != 0; i++)					/* Print each char in string till null */
+	{
+		if (Y_address > (1024-(((page_no)*128)+FontWidth))) /* Check Whether Total Display get overflowed */
+		break;										/* If yes then break writing */
+		if (str[i]!=32)								/* Check whether character is not a SPACE */
+		{
+			for (column=1; column<=FontWidth; column++)
+			{
+				if ((Y_address+column)==(128*((int)(Page_inc+0.5))))	/* If yes then check whether it overflow from right side of display */
+				{
+					if (column == FontWidth)		/* Also check and break if it overflow after 5th column */
+					break;
+					GLCD_Command(0x40);				/* If not 5th and get overflowed then change Y address to START column */
+					Y_address = Y_address + column;	/* Increment Y address count by column no. */
+					Command_Port ^= (1 << CS1);		/* If yes then change segment controller to display on other half of display */
+					Command_Port ^= (1 << CS2);
+					GLCD_Command(Page + Page_inc);	/* Execute command for page change */
+					Page_inc = Page_inc + 0.5;		/* Increment Page No. by half */
+				}
+			}
+		}
+		if (Y_address>(1024-(((page_no)*128)+FontWidth)))   /* Check Whether Total Display get overflowed */
+		break;										/* If yes then break writing */
+		if((font[((str[i]-32)*FontWidth)+4])==0 || str[i]==32)/* Check whether character is SPACE or character last column is zero */
+		{
+			for(column=0; column<FontWidth; column++)
+			{
+				GLCD_Data(font[str[i]-32][column]);	/* If yes then then print character */
+				if((Y_address+1)%64==0)				/* check whether it gets overflowed  from either half of side */
+				{
+					Command_Port ^= (1 << CS1);		/* If yes then change segment controller to display on other half of display */
+					Command_Port ^= (1 << CS2);
+					GLCD_Command((Page+Page_inc));	/* Execute command for page change */
+					Page_inc = Page_inc + 0.5;		/* Increment Page No. by half */
+				}
+				Y_address++;						/* Increment Y_address count per column */
+			}
+		}
+		else										/* If character is not SPACE or character last column is not zero */
+		{
+			for(column=0; column<FontWidth; column++)
+			{
+				GLCD_Data(font[str[i]-32][column]); /* Then continue to print hat char */
+				if((Y_address+1)%64==0)				/* check whether it gets overflowed  from either half of side */
+				{
+					Command_Port ^= (1 << CS1);		/* If yes then change segment controller to display on other half of display */
+					Command_Port ^= (1 << CS2);
+					GLCD_Command((Page+Page_inc));	/* Execute command for page change */
+					Page_inc = Page_inc + 0.5;		/* Increment Page No. by half */
+				}
+				Y_address++;						/* Increment Y_address count per column */
+			}
+			GLCD_Data(0);							/* Add one column of zero to print next character next of zero */
+			Y_address++;							/* Increment Y_address count for last added zero */
+			if((Y_address)%64 == 0)					/* check whether it gets overflowed  from either half of side */
+			{
+				Command_Port ^= (1 << CS1);			/* If yes then change segment controller to display on other half of display */
+				Command_Port ^= (1 << CS2);
+				GLCD_Command((Page+Page_inc));		/* Execute command for page change */
+				Page_inc = Page_inc + 0.5;			/* Increment Page No. by half */
+			}
+		}
+	}
+	GLCD_Command(0x40);								/* Set Y address (column=0) */
+}
+
+int main(void)
+{
+	GLCD_Init();									/* Initialize GLCD */
+	GLCD_ClearAll();								/* Clear all GLCD display */
+	GLCD_String(0,"FREQ: 8MHZ");							/* Print String on 0th page of display */
+	while(1);
+}
 
